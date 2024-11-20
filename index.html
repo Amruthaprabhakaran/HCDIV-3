@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HDB Resale Prices in Punggol</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+    #chart {
+      margin: 20px auto;
+      width: 90%;
+      max-width: 800px;
+      height: 500px;
+    }
+    .tooltip {
+      position: absolute;
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 5px;
+      border-radius: 5px;
+      pointer-events: none;
+      font-size: 12px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+      display: none;
+    }
+    .legend rect {
+      stroke: #000;
+      stroke-width: 0.5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>HDB Resale Prices Analysis - Punggol</h1>
+  <p>Hypothesis: Resale flat prices in Punggol have been steadily increasing, with larger flats showing a greater percentage price increase.</p>
+  <div id="chart"></div>
+  <div id="tooltip" class="tooltip"></div>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+  // Load the CSV data
+  d3.csv("C:\Users\Amrutha\Documents\HCDIV-3\data\dataresale-flat-prices.csv").then(data => {
+      // Filter data for Punggol
+      const punggolData = data.filter(d => d.town === "PUNGGOL");
+
+      // Parse date and resale price
+      punggolData.forEach(d => {
+          d.year = new Date(d.month + "-01").getFullYear(); // Add day to parse date
+          d.resale_price = +d.resale_price; // Convert resale price to number
+      });
+
+      // Group data by year and flat type
+      const groupedData = d3.group(punggolData, d => d.year, d => d.flat_type);
+
+      // Prepare data for the chart
+      const chartData = [];
+      for (const [year, flats] of groupedData) {
+          for (const [type, records] of flats) {
+              const avgPrice = d3.mean(records, d => d.resale_price);
+              chartData.push({ year: +year, type, avgPrice });
+          }
+      }
+
+      // Set up chart dimensions
+      const margin = { top: 20, right: 30, bottom: 50, left: 60 };
+      const width = 800 - margin.left - margin.right;
+      const height = 500 - margin.top - margin.bottom;
+
+      const svg = d3.select("#chart")
+          .append("svg")
+          .attr("width", width + margin.left + margin.right)
+          .attr("height", height + margin.top + margin.bottom);
+
+      const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+      // Set up scales
+      const xScale = d3.scaleLinear()
+          .domain(d3.extent(chartData, d => d.year))
+          .range([0, width]);
+
+      const yScale = d3.scaleLinear()
+          .domain([0, d3.max(chartData, d => d.avgPrice)])
+          .range([height, 0]);
+
+      const colorScale = d3.scaleOrdinal()
+          .domain([...new Set(chartData.map(d => d.type))])
+          .range(d3.schemeCategory10);
+
+      // Add axes
+      g.append("g")
+          .attr("transform", `translate(0,${height})`)
+          .call(d3.axisBottom(xScale).tickFormat(d3.format("d")));
+
+      g.append("g").call(d3.axisLeft(yScale));
+
+      // Line generator
+      const line = d3.line()
+          .x(d => xScale(d.year))
+          .y(d => yScale(d.avgPrice));
+
+      // Group data by flat type and draw lines
+      const flatTypes = d3.group(chartData, d => d.type);
+
+      for (const [type, values] of flatTypes) {
+          g.append("path")
+              .datum(values)
+              .attr("fill", "none")
+              .attr("stroke", colorScale(type))
+              .attr("stroke-width", 2)
+              .attr("d", line);
+      }
+
+      // Add legend
+      const legend = g.selectAll(".legend")
+          .data(flatTypes.keys())
+          .enter()
+          .append("g")
+          .attr("class", "legend")
+          .attr("transform", (d, i) => `translate(${width - 100},${i * 20})`);
+
+      legend.append("rect")
+          .attr("width", 10)
+          .attr("height", 10)
+          .attr("fill", d => colorScale(d));
+
+      legend.append("text")
+          .text(d => d)
+          .attr("x", 15)
+          .attr("y", 10);
+  }).catch(error => {
+      console.error("Error loading or processing data:", error);
+  });
+</script>
+</body>
+</html>

@@ -40,7 +40,7 @@
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
   // Load the CSV data
-  d3.csv("C:\Users\Amrutha\Documents\HCDIV-3\data\dataresale-flat-prices.csv").then(data => {
+  d3.csv("data/dataresale-flat-prices.csv").then(data => {
       // Filter data for Punggol
       const punggolData = data.filter(d => d.town === "PUNGGOL");
 

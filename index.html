@@ -8,12 +8,14 @@
     body {
       font-family: Arial, sans-serif;
       text-align: center;
+      margin: 0;
+      padding: 0;
     }
     #chart {
-      margin: 20px auto;
-      width: 90%;
-      max-width: 800px;
-      height: 500px;
+      margin: 30px auto;
+      width: 95%;
+      max-width: 1000px;
+      height: 600px;
     }
     .tooltip {
       position: absolute;
@@ -30,134 +32,207 @@
       stroke: #000;
       stroke-width: 0.5px;
     }
-    #hypothesis {
+    #filters, #hypothesis, #findings {
+      margin: 20px auto;
+      text-align: left;
+      max-width: 1000px;
       font-size: 14px;
-      color: #555;
-      margin-top: 20px;
+      line-height: 1.6;
+    }
+    label {
+      font-size: 14px;
+      margin-right: 10px;
+    }
+    select {
+      margin: 10px;
+    }
+    #filters {
+      text-align: center;
     }
   </style>
 </head>
 <body>
   <h1>HDB Resale Prices Analysis - Punggol</h1>
-  <div id="chart"></div>
-  <div id="tooltip" class="tooltip"></div>
+
   <div id="hypothesis">
     <p><strong>Hypothesis:</strong> Resale flat prices in Punggol have been steadily increasing, with larger flats showing a greater percentage price increase.</p>
   </div>
+
+  <div id="filters">
+    <label for="floorLevelFilter">Select Floor Level:</label>
+    <select id="floorLevelFilter">
+      <option value="ALL">All</option>
+    </select>
+  </div>
+
+  <div id="chart"></div>
+  <div id="tooltip" class="tooltip"></div>
+
+  <div id="findings">
+    <p><strong>Findings:</strong></p>
+    <ul>
+      <li>Resale prices in Punggol have been steadily increasing over the years, especially for larger flat types.</li>
+      <li>Higher-floor flats tend to command a premium due to better views and higher demand.</li>
+      <li>Trends in resale prices differ by floor level, reflecting variations in buyer preferences and affordability.</li>
+    </ul>
+  </div>
+
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script>
     d3.csv("data/dataresale-flat-prices.csv").then(data => {
+        // Filter data for Punggol
         const punggolData = data.filter(d => d.town === "PUNGGOL" && d.resale_price && d.month);
+
         punggolData.forEach(d => {
             d.year = new Date(d.month + "-01").getFullYear();
             d.resale_price = +d.resale_price;
         });
 
-        const groupedData = d3.group(punggolData, d => d.year, d => d.flat_type);
-        const chartData = [];
-        for (const [year, flats] of groupedData) {
-            for (const [type, records] of flats) {
-                const avgPrice = d3.mean(records, d => d.resale_price);
-                chartData.push({ year: +year, type, avgPrice });
+        // Extract unique floor levels and sort in descending order
+        const floorLevels = [...new Set(punggolData.map(d => d.storey_range))]
+            .sort((a, b) => {
+                // Extract numerical ranges for sorting
+                const aRange = a.split(" TO ").map(Number);
+                const bRange = b.split(" TO ").map(Number);
+                return bRange[0] - aRange[0]; // Compare the lower bound of the range in descending order
+            });
+
+        // Populate filter dropdown
+        const floorLevelFilter = document.getElementById("floorLevelFilter");
+        floorLevels.forEach(level => {
+          const option = document.createElement("option");
+          option.value = level;
+          option.textContent = level;
+          floorLevelFilter.appendChild(option);
+        });
+
+        // Helper function to update chart based on floor level filter
+        function updateChart() {
+            const selectedFloorLevel = floorLevelFilter.value;
+            let filteredData = punggolData;
+
+            if (selectedFloorLevel !== "ALL") {
+                filteredData = filteredData.filter(d => d.storey_range === selectedFloorLevel);
             }
+
+            drawChart(filteredData);
         }
 
-        const margin = { top: 20, right: 120, bottom: 50, left: 80 };
-        const width = 800 - margin.left - margin.right;
-        const height = 500 - margin.top - margin.bottom;
+        // Initial chart draw
+        updateChart();
 
-        const svg = d3.select("#chart")
-            .append("svg")
-            .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
-            .attr("preserveAspectRatio", "xMidYMid meet");
+        // Add event listener for filter
+        floorLevelFilter.addEventListener("change", updateChart);
 
-        const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+        // Function to draw chart
+        function drawChart(data) {
+            const groupedData = d3.group(data, d => d.year, d => d.flat_type);
+            const chartData = [];
+            for (const [year, flats] of groupedData) {
+                for (const [type, records] of flats) {
+                    const avgPrice = d3.mean(records, d => d.resale_price);
+                    chartData.push({ year: +year, type, avgPrice });
+                }
+            }
 
-        const xScale = d3.scaleLinear()
-            .domain(d3.extent(chartData, d => d.year))
-            .range([0, width]);
+            const margin = { top: 30, right: 150, bottom: 70, left: 100 };
+            const width = 1000 - margin.left - margin.right;
+            const height = 600 - margin.top - margin.bottom;
 
-        const yScale = d3.scaleLinear()
-            .domain([0, d3.max(chartData, d => d.avgPrice)])
-            .range([height, 0]);
+            d3.select("#chart").html("");
+            const svg = d3.select("#chart")
+                .append("svg")
+                .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+                .attr("preserveAspectRatio", "xMidYMid meet");
 
-        const colorScale = d3.scaleOrdinal()
-            .domain([...new Set(chartData.map(d => d.type))])
-            .range(d3.schemeTableau10);
+            const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-        g.append("g")
-            .attr("transform", `translate(0,${height})`)
-            .call(d3.axisBottom(xScale).tickFormat(d3.format("d")));
+            const xScale = d3.scaleLinear()
+                .domain(d3.extent(chartData, d => d.year))
+                .range([0, width]);
 
-        g.append("g").call(d3.axisLeft(yScale));
+            const yScale = d3.scaleLinear()
+                .domain([0, d3.max(chartData, d => d.avgPrice)])
+                .range([height, 0]);
 
-        // Add axis labels
-        g.append("text")
-            .attr("x", width / 2)
-            .attr("y", height + margin.bottom - 10)
-            .style("text-anchor", "middle")
-            .text("Year");
+            const colorScale = d3.scaleOrdinal()
+                .domain([...new Set(chartData.map(d => d.type))])
+                .range(d3.schemeTableau10);
 
-        g.append("text")
-            .attr("transform", "rotate(-90)")
-            .attr("x", -height / 2)
-            .attr("y", -margin.left + 20)
-            .style("text-anchor", "middle")
-            .text("Average Resale Price (SGD)");
+            g.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(xScale).tickFormat(d3.format("d")));
 
-        const line = d3.line()
-            .x(d => xScale(d.year))
-            .y(d => yScale(d.avgPrice));
+            g.append("g").call(d3.axisLeft(yScale));
 
-        const tooltip = d3.select("#tooltip");
-        const formatPrice = new Intl.NumberFormat("en-US", {
-            style: "currency",
-            currency: "SGD",
-            minimumFractionDigits: 0,
-        });
+            // Add axis labels
+            g.append("text")
+                .attr("x", width / 2)
+                .attr("y", height + margin.bottom - 20)
+                .style("text-anchor", "middle")
+                .text("Year");
 
-        const flatTypes = d3.group(chartData, d => d.type);
-        flatTypes.forEach((values, type) => {
-            g.append("path")
-                .datum(values)
-                .attr("fill", "none")
-                .attr("stroke", colorScale(type))
-                .attr("stroke-width", 2)
-                .attr("d", line);
+            g.append("text")
+                .attr("transform", "rotate(-90)")
+                .attr("x", -height / 2)
+                .attr("y", -margin.left + 20)
+                .style("text-anchor", "middle")
+                .text("Average Resale Price (SGD)");
 
-            g.selectAll(`.dot-${type}`)
-                .data(values)
-                .enter()
-                .append("circle")
-                .attr("class", `dot-${type}`)
-                .attr("cx", d => xScale(d.year))
-                .attr("cy", d => yScale(d.avgPrice))
-                .attr("r", 4)
-                .attr("fill", colorScale(type))
-                .on("mouseover", (event, d) => {
-                    tooltip.style("display", "block")
-                        .style("left", `${event.pageX + 10}px`)
-                        .style("top", `${event.pageY - 20}px`)
-                        .html(`<strong>Type:</strong> ${type}<br><strong>Year:</strong> ${d.year}<br><strong>Price:</strong> ${formatPrice.format(d.avgPrice)}`);
-                })
-                .on("mouseout", () => tooltip.style("display", "none"));
-        });
+            const line = d3.line()
+                .x(d => xScale(d.year))
+                .y(d => yScale(d.avgPrice));
 
-        const legend = svg.append("g")
-            .attr("transform", `translate(${width + margin.left + 20},${margin.top})`);
+            const tooltip = d3.select("#tooltip");
+            const formatPrice = new Intl.NumberFormat("en-US", {
+                style: "currency",
+                currency: "SGD",
+                minimumFractionDigits: 0,
+            });
 
-        Array.from(flatTypes.keys()).forEach((type, i) => {
-            const legendGroup = legend.append("g")
-                .attr("transform", `translate(0,${i * 20})`);
-            legendGroup.append("rect")
-                .attr("width", 10)
-                .attr("height", 10)
-                .attr("fill", colorScale(type));
-            legendGroup.append("text")
-                .attr("x", 15)
-                .attr("y", 10)
-                .text(type);
-        });
+            const flatTypes = d3.group(chartData, d => d.type);
+            flatTypes.forEach((values, type) => {
+                g.append("path")
+                    .datum(values)
+                    .attr("fill", "none")
+                    .attr("stroke", colorScale(type))
+                    .attr("stroke-width", 2)
+                    .attr("d", line);
+
+                g.selectAll(`.dot-${type}`)
+                    .data(values)
+                    .enter()
+                    .append("circle")
+                    .attr("class", `dot-${type}`)
+                    .attr("cx", d => xScale(d.year))
+                    .attr("cy", d => yScale(d.avgPrice))
+                    .attr("r", 4)
+                    .attr("fill", colorScale(type))
+                    .on("mouseover", (event, d) => {
+                        tooltip.style("display", "block")
+                            .style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY - 20}px`)
+                            .html(`<strong>Type:</strong> ${type}<br><strong>Year:</strong> ${d.year}<br><strong>Price:</strong> ${formatPrice.format(d.avgPrice)}`);
+                    })
+                    .on("mouseout", () => tooltip.style("display", "none"));
+            });
+
+            const legend = svg.append("g")
+                .attr("transform", `translate(${width + margin.left + 20},${margin.top})`);
+
+            Array.from(flatTypes.keys()).forEach((type, i) => {
+                const legendGroup = legend.append("g")
+                    .attr("transform", `translate(0,${i * 20})`);
+                legendGroup.append("rect")
+                    .attr("width", 10)
+                    .attr("height", 10)
+                    .attr("fill", colorScale(type));
+                legendGroup.append("text")
+                    .attr("x", 15)
+                    .attr("y", 10)
+                    .text(type);
+            });
+        }
     }).catch(error => {
         console.error("Error loading or processing data:", error);
     });
